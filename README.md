@@ -26,7 +26,7 @@ This Python script automates the translation of `.resx` resource files for a pro
    ```
 3. Run the script:
    ```sh
-   python3 main.py --new-only --resx-directory /path/to/resx --exclude-languages "fr,de"
+   python3 main.py --new-only --resx-directory /path/to/resx --base-name AppStrings --target-languages "fr,de,ru"
    ```
 4. Create an executable:
    ```sh
@@ -41,7 +41,7 @@ This Python script automates the translation of `.resx` resource files for a pro
    ```
 3. Run the script:
    ```cmd
-   python main.py --new-only --resx-directory C:\path\to\resx --exclude-languages "fr,de"
+   python main.py --new-only --resx-directory C:\path\to\resx --base-name AppStrings --target-languages "fr,de,ru"
    ```
 4. Create an executable:
    ```cmd
@@ -59,7 +59,7 @@ This Python script automates the translation of `.resx` resource files for a pro
    ```
 3. Run the script:
    ```sh
-   python3 main.py --new-only --resx-directory /path/to/resx --exclude-languages "fr,de"
+   python3 main.py --new-only --resx-directory /path/to/resx --base-name AppStrings --target-languages "fr,de,ru"
    ```
 4. Create an executable:
    ```sh
@@ -71,7 +71,11 @@ This Python script automates the translation of `.resx` resource files for a pro
 
 ### Command-Line Arguments
 - `--resx-directory <directory>`: Specifies the path to the `.resx` files directory.
+- `--base-name <name>`: Neutral resource file name without `.resx` (default: `AppRes`).
+- `--target-languages <languages>`: Comma-separated target languages to create/update (e.g. `fr,de,ru`).
+- `--language-config <path>`: Reads target languages from a JSON config with a `languages` array.
 - `--exclude-languages <languages>`: Comma-separated list of languages to exclude (e.g., `fr,de`).
+- `--fallback-to-source`: Keeps the build moving by writing the source text when a translation request fails after retries.
 - `--force`: Translates all entries regardless of existing values.
   - **Example:**
     ```sh
@@ -80,7 +84,7 @@ This Python script automates the translation of `.resx` resource files for a pro
 - `--new-only`: Translates only missing or new entries.
   - **Example:**
     ```sh
-    python main.py --new-only --resx-directory /path/to/resx --exclude-languages "fr,de"
+    python main.py --new-only --resx-directory /path/to/resx --base-name AppStrings --target-languages "fr,de,ru"
     ```
 
 ---
@@ -111,7 +115,7 @@ Ez a Python szkript automatikusan lefordítja a `.resx` erőforrásfájlokat egy
    ```
 3. Futtasd a szkriptet:
    ```sh
-   python3 main.py --new-only --resx-directory /path/to/resx --exclude-languages "fr,de"
+   python3 main.py --new-only --resx-directory /path/to/resx --base-name AppStrings --target-languages "fr,de,ru"
    ```
 4. Hozz létre egy futtatható fájlt:
    ```sh
@@ -126,7 +130,7 @@ Ez a Python szkript automatikusan lefordítja a `.resx` erőforrásfájlokat egy
    ```
 3. Futtasd a szkriptet:
    ```cmd
-   python main.py --new-only --resx-directory C:\path\to\resx --exclude-languages "fr,de"
+   python main.py --new-only --resx-directory C:\path\to\resx --base-name AppStrings --target-languages "fr,de,ru"
    ```
 4. Hozz létre egy futtatható fájlt:
    ```cmd
@@ -144,7 +148,7 @@ Ez a Python szkript automatikusan lefordítja a `.resx` erőforrásfájlokat egy
    ```
 3. Futtasd a szkriptet:
    ```sh
-   python3 main.py --new-only --resx-directory /path/to/resx --exclude-languages "fr,de"
+   python3 main.py --new-only --resx-directory /path/to/resx --base-name AppStrings --target-languages "fr,de,ru"
    ```
 4. Hozz létre egy futtatható fájlt:
    ```sh
@@ -156,7 +160,11 @@ Ez a Python szkript automatikusan lefordítja a `.resx` erőforrásfájlokat egy
 
 ### Parancssori argumentumok
 - `--resx-directory <könyvtár>`: Az `.resx` fájlokat tartalmazó könyvtár elérési útja.
+- `--base-name <név>`: Az alap erőforrásfájl neve `.resx` nélkül (alapértelmezés: `AppRes`).
+- `--target-languages <nyelvek>`: Létrehozandó/frissítendő cél nyelvek vesszővel elválasztva (pl. `fr,de,ru`).
+- `--language-config <útvonal>`: Cél nyelvek betöltése `languages` tömböt tartalmazó JSON konfigurációból.
 - `--exclude-languages <nyelvek>`: Kizárt nyelvek vesszővel elválasztott listája (pl. `fr,de`).
+- `--fallback-to-source`: Build közben a forrásszöveget írja be, ha a fordítási kérés többszöri próbálkozás után sem sikerül.
 - `--force`: Az összes bejegyzést lefordítja, még ha már léteznek is.
   - **Példa:**
     ```sh
@@ -165,5 +173,5 @@ Ez a Python szkript automatikusan lefordítja a `.resx` erőforrásfájlokat egy
 - `--new-only`: Csak az új vagy hiányzó bejegyzéseket fordítja le.
   - **Példa:**
     ```sh
-    python main.py --new-only --resx-directory /path/to/resx --exclude-languages "fr,de"
+    python main.py --new-only --resx-directory /path/to/resx --base-name AppStrings --target-languages "fr,de,ru"
     ```
