@@ -48,6 +48,24 @@ This Python script automates the translation of `.resx` resource files for a pro
    pyinstaller --onefile --console --hidden-import=deep_translator.main main.py
    ```
 
+#### macOS
+1. Ensure Python 3 is installed. You can use the official installer from [Python website](https://www.python.org/downloads/) or Homebrew:
+   ```sh
+   brew install python
+   ```
+2. Install dependencies:
+   ```sh
+   pip3 install deep-translator
+   ```
+3. Run the script:
+   ```sh
+   python3 main.py --new-only --resx-directory /path/to/resx --exclude-languages "fr,de"
+   ```
+4. Create an executable:
+   ```sh
+   pyinstaller --onefile --console --hidden-import=deep_translator.main main.py
+   ```
+
 ### Dependencies
 - `deep-translator` (install using `pip install deep-translator`)
 
@@ -115,6 +133,24 @@ Ez a Python szkript automatikusan lefordítja a `.resx` erőforrásfájlokat egy
    pyinstaller --onefile --console --hidden-import=deep_translator.main main.py
    ```
 
+#### macOS
+1. Telepítsd a Python 3-at. Használhatod a hivatalos telepítőt a [Python letöltés](https://www.python.org/downloads/) oldalról, vagy a Homebrew-t:
+   ```sh
+   brew install python
+   ```
+2. Telepítsd a függőségeket:
+   ```sh
+   pip3 install deep-translator
+   ```
+3. Futtasd a szkriptet:
+   ```sh
+   python3 main.py --new-only --resx-directory /path/to/resx --exclude-languages "fr,de"
+   ```
+4. Hozz létre egy futtatható fájlt:
+   ```sh
+   pyinstaller --onefile --console --hidden-import=deep_translator.main main.py
+   ```
+
 ### Függőségek
 - `deep-translator` (telepíthető `pip install deep-translator` paranccsal)
 
@@ -131,4 +167,3 @@ Ez a Python szkript automatikusan lefordítja a `.resx` erőforrásfájlokat egy
     ```sh
     python main.py --new-only --resx-directory /path/to/resx --exclude-languages "fr,de"
     ```
-
