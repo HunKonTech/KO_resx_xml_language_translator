@@ -1,10 +1,14 @@
 import os
 import re
 import sys
+import time
+import random
+import threading
 import argparse
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from deep_translator import GoogleTranslator
+from deep_translator.exceptions import TooManyRequests, RequestError
 
 # Matches {placeholder} interpolation tokens used by the TS i18n `t()` helper.
 PLACEHOLDER_RE = re.compile(r"\{[^{}]*\}")
@@ -68,11 +72,47 @@ class ProgressPrinter:
             self._render()
 
 
+class _RateLimiter:
+    """Process-wide throttle. Google's free endpoint allows ~5 requests/second."""
+
+    def __init__(self, max_per_second=4.0):
+        self._min_interval = 1.0 / max_per_second
+        self._lock = threading.Lock()
+        self._next_allowed = 0.0
+
+    def wait(self):
+        with self._lock:
+            now = time.monotonic()
+            wait_for = self._next_allowed - now
+            if wait_for > 0:
+                time.sleep(wait_for)
+                now = time.monotonic()
+            self._next_allowed = now + self._min_interval
+
+
+_RATE_LIMITER = _RateLimiter()
+
+# Retry on transient rate-limit / network errors before giving up on an item.
+_MAX_RETRIES = 6
+
+
 def translate_text(text, target_lang):
     if text is None or str(text).strip() == "":
         return text
     translator = GoogleTranslator(source='auto', target=normalize_lang(target_lang))
-    return translator.translate(text)
+    for attempt in range(_MAX_RETRIES):
+        _RATE_LIMITER.wait()
+        try:
+            return translator.translate(text)
+        except (TooManyRequests, RequestError) as exc:
+            if attempt == _MAX_RETRIES - 1:
+                raise
+            # Exponential backoff with jitter; also pushes back the shared limiter.
+            delay = min(2 ** attempt, 30) + random.uniform(0, 1)
+            _RATE_LIMITER._next_allowed = time.monotonic() + delay
+            time.sleep(delay)
+    # Unreachable, but keeps linters happy.
+    raise RuntimeError("translation retries exhausted")
 
 
 def translate_preserving_placeholders(text, target_lang):
@@ -107,17 +147,36 @@ def run_translations(worklist, translate_fn, workers, progress=None, describe=No
     consumed on the calling thread, so progress printing and file writing stay serial.
     """
     results = []
+    failures = []
     if not worklist:
         return results
 
+    def _safe(item):
+        try:
+            return translate_fn(item), None
+        except Exception as exc:  # keep going so partial results are still written
+            return (item, None), exc
+
     workers = max(1, min(workers, len(worklist)))
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        for item, translated in executor.map(translate_fn, worklist):
-            results.append((item, translated))
+        for (item, translated), error in executor.map(_safe, worklist):
+            if error is not None:
+                failures.append((item, error))
+            else:
+                results.append((item, translated))
             if progress is not None:
-                progress.step(describe(item, translated) if describe else str(translated))
-            elif describe is not None:
+                shown = f"FAILED: {error}" if error else (
+                    describe(item, translated) if describe else str(translated))
+                progress.step(shown)
+            elif describe is not None and not error:
                 print(describe(item, translated))
+
+    if failures:
+        print(f"\n{len(failures)} item(s) could not be translated and were left unchanged:")
+        for item, error in failures[:20]:
+            print(f"  {item}: {error}")
+        if len(failures) > 20:
+            print(f"  ... and {len(failures) - 20} more")
     return results
 
 
