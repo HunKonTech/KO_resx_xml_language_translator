@@ -83,6 +83,87 @@ This Python script automates the translation of `.resx` resource files for a pro
     python main.py --new-only --resx-directory /path/to/resx --exclude-languages "fr,de"
     ```
 
+### TypeScript i18n support
+
+Besides `.resx` files, the script can translate a **TypeScript i18n file** that
+keeps every language in one inline dictionary object:
+
+```ts
+export type Lang = "en" | "hu" | "zh" | "ru";
+
+const DICTS: Record<Lang, Dict> = {
+  en: {
+    "toolbar.refresh": "Refresh",
+    "menu.createBranch": "Create branch {name}",
+  },
+  hu: {
+    "toolbar.refresh": "Frissítés",
+  },
+  zh: { /* ... */ },
+  ru: { /* ... */ },
+};
+```
+
+#### How it works
+
+1. The script locates the `const DICTS = { ... }` object literal in the file
+   (the declaration may also be `let` / `var` and may carry a type annotation
+   such as `: Record<Lang, Dict>`).
+2. It splits the object into one dictionary per language, keeping key order.
+3. The **source language** (`en` by default, configurable with
+   `--i18n-source-lang`) is the reference. Every key that exists in the source
+   is checked in the other languages.
+   - `--new-only`: only keys that are missing (or empty) in a target language
+     are translated.
+   - `--force`: every key of every non-source language is re-translated.
+4. `{placeholder}` interpolation tokens (used by the `t("key", { name })`
+   helper) are **kept verbatim** — they are shielded before translation and
+   restored afterwards, even if the translator changes their casing/spacing.
+5. Language keys are mapped to Google Translate codes automatically
+   (`zh` → `zh-CN`, `zh-tw` → `zh-TW`, `he` → `iw`, …).
+6. Only the `DICTS` object literal is rewritten (using the source key order for
+   every language). Imports, the `t()` function, types and everything else in
+   the file stay untouched.
+7. Progress is shown live as a percentage bar with the **last 4 translated
+   lines** below it:
+   ```
+   [###############---------------]  52.3%  (130/248)
+     (zh) settings.theme: Theme --> 主题
+     (ru) toolbar.push: ⇧ Push --> ⇧ Толкать
+   ```
+
+#### Command-line arguments
+
+- `--i18n-file <path>`: Path to the `.ts` file that contains the `DICTS` object.
+- `--i18n-source-lang <lang>`: Source language key inside `DICTS` (default `en`).
+- Use together with `--new-only` **or** `--force`, and optionally
+  `--exclude-languages` (comma-separated language keys to skip, e.g. languages
+  you maintain by hand).
+
+#### Examples
+
+Fill in only the missing keys for every language except `ru`:
+
+```sh
+python3 main.py --new-only \
+  --i18n-file /path/to/project/packages/graph-webview/src/i18n.ts \
+  --exclude-languages "ru"
+```
+
+Re-translate everything, but keep the hand-written `en` and `hu` dictionaries:
+
+```sh
+python3 main.py --force \
+  --i18n-file /path/to/project/packages/graph-webview/src/i18n.ts \
+  --exclude-languages "hu"
+```
+
+You can also use the interactive menu (options **3** and **4** cover the
+TypeScript i18n file).
+
+> On macOS use `python3` (and install the dependency with
+> `pip3 install deep-translator --break-system-packages` if needed).
+
 ---
 
 ## Magyar
@@ -167,3 +248,86 @@ Ez a Python szkript automatikusan lefordítja a `.resx` erőforrásfájlokat egy
     ```sh
     python main.py --new-only --resx-directory /path/to/resx --exclude-languages "fr,de"
     ```
+
+### TypeScript i18n támogatás
+
+A `.resx` fájlok mellett a szkript egy **TypeScript i18n fájlt** is le tud
+fordítani, amely az összes nyelvet egyetlen soron belüli szótárobjektumban
+tartja:
+
+```ts
+export type Lang = "en" | "hu" | "zh" | "ru";
+
+const DICTS: Record<Lang, Dict> = {
+  en: {
+    "toolbar.refresh": "Refresh",
+    "menu.createBranch": "Create branch {name}",
+  },
+  hu: {
+    "toolbar.refresh": "Frissítés",
+  },
+  zh: { /* ... */ },
+  ru: { /* ... */ },
+};
+```
+
+#### Működés
+
+1. A szkript megkeresi a `const DICTS = { ... }` objektumliterált a fájlban
+   (lehet `let` / `var` is, és lehet rajta típusannotáció, pl.
+   `: Record<Lang, Dict>`).
+2. Az objektumot nyelvenként külön szótárra bontja, a kulcssorrendet megtartva.
+3. A **forrásnyelv** (alapból `en`, a `--i18n-source-lang` kapcsolóval
+   állítható) a referencia. A forrásban lévő minden kulcsot ellenőriz a többi
+   nyelvben.
+   - `--new-only`: csak a hiányzó (vagy üres) kulcsokat fordítja le az adott
+     nyelvben.
+   - `--force`: minden nem-forrásnyelv minden kulcsát újrafordítja.
+4. A `{placeholder}` tokenek (amiket a `t("kulcs", { name })` hívás használ)
+   **érintetlenül maradnak** – fordítás előtt védetté teszi, utána visszaállítja
+   őket, még akkor is, ha a fordító megváltoztatja a kis-/nagybetűt vagy a
+   szóközöket.
+5. A nyelvi kulcsokat automatikusan Google Translate kódokra képezi le
+   (`zh` → `zh-CN`, `zh-tw` → `zh-TW`, `he` → `iw`, …).
+6. Csak a `DICTS` objektumliterál íródik újra (minden nyelvnél a forrás
+   kulcssorrendjével). Az importok, a `t()` függvény, a típusok és minden más a
+   fájlban változatlan marad.
+7. A folyamat élőben látszik: százalékos csík, alatta a **4 legutóbbi lefordított
+   sor**:
+   ```
+   [###############---------------]  52.3%  (130/248)
+     (zh) settings.theme: Theme --> 主题
+     (ru) toolbar.push: ⇧ Push --> ⇧ Толкать
+   ```
+
+#### Parancssori argumentumok
+
+- `--i18n-file <útvonal>`: A `DICTS` objektumot tartalmazó `.ts` fájl elérési útja.
+- `--i18n-source-lang <nyelv>`: A forrásnyelv kulcsa a `DICTS`-ben (alapértelmezés: `en`).
+- A `--new-only` **vagy** `--force` kapcsolóval együtt használandó, opcionálisan
+  a `--exclude-languages` kapcsolóval (vesszővel elválasztott nyelvi kulcsok,
+  amiket ki kell hagyni – pl. amiket kézzel karbantartasz).
+
+#### Példák
+
+Csak a hiányzó kulcsok pótlása minden nyelvre, kivéve `ru`:
+
+```sh
+python3 main.py --new-only \
+  --i18n-file /path/to/project/packages/graph-webview/src/i18n.ts \
+  --exclude-languages "ru"
+```
+
+Minden újrafordítása, de a kézzel írt `en` és `hu` szótár megtartása:
+
+```sh
+python3 main.py --force \
+  --i18n-file /path/to/project/packages/graph-webview/src/i18n.ts \
+  --exclude-languages "hu"
+```
+
+Az interaktív menü is használható (a **3.** és **4.** opció a TypeScript i18n
+fájlt kezeli).
+
+> macOS-en `python3` a parancs (és ha kell, a függőség:
+> `pip3 install deep-translator --break-system-packages`).
