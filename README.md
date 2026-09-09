@@ -82,6 +82,14 @@ This Python script automates the translation of `.resx` resource files for a pro
     ```sh
     python main.py --new-only --resx-directory /path/to/resx --exclude-languages "fr,de"
     ```
+- `--workers <n>`: Number of parallel translation workers (default: `8`). Translation
+  requests run concurrently across all languages, while each output file is still built
+  and written once on a single thread, so the generated files never get mixed up. Lower
+  this (e.g. `4`) if Google Translate starts rate-limiting.
+  - **Example:**
+    ```sh
+    python main.py --new-only --resx-directory /path/to/resx --workers 4
+    ```
 
 ### TypeScript i18n support
 
@@ -136,6 +144,9 @@ const DICTS: Record<Lang, Dict> = {
 
 - `--i18n-file <path>`: Path to the `.ts` file that contains the `DICTS` object.
 - `--i18n-source-lang <lang>`: Source language key inside `DICTS` (default `en`).
+- `--workers <n>`: Parallel translation workers (default `8`). All missing keys across
+  every language are translated concurrently; the `DICTS` object is then rebuilt and
+  written once, so the file stays consistent.
 - Use together with `--new-only` **or** `--force`, and optionally
   `--exclude-languages` (comma-separated language keys to skip, e.g. languages
   you maintain by hand).
@@ -248,6 +259,14 @@ Ez a Python szkript automatikusan lefordítja a `.resx` erőforrásfájlokat egy
     ```sh
     python main.py --new-only --resx-directory /path/to/resx --exclude-languages "fr,de"
     ```
+- `--workers <n>`: A párhuzamos fordító szálak száma (alapértelmezés: `8`). A fordítási
+  kérések az összes nyelvre egyszerre futnak, de minden kimeneti fájl továbbra is egyetlen
+  szálon, egyszer épül fel és íródik ki, így a generált fájlok soha nem keverednek össze.
+  Csökkentsd (pl. `4`), ha a Google Fordító rate-limitelni kezd.
+  - **Példa:**
+    ```sh
+    python main.py --new-only --resx-directory /path/to/resx --workers 4
+    ```
 
 ### TypeScript i18n támogatás
 
@@ -304,6 +323,9 @@ const DICTS: Record<Lang, Dict> = {
 
 - `--i18n-file <útvonal>`: A `DICTS` objektumot tartalmazó `.ts` fájl elérési útja.
 - `--i18n-source-lang <nyelv>`: A forrásnyelv kulcsa a `DICTS`-ben (alapértelmezés: `en`).
+- `--workers <n>`: Párhuzamos fordító szálak száma (alapértelmezés: `8`). Az összes nyelv
+  összes hiányzó kulcsa egyszerre fordul le; a `DICTS` objektum ezután egyszer épül újra és
+  íródik ki, így a fájl konzisztens marad.
 - A `--new-only` **vagy** `--force` kapcsolóval együtt használandó, opcionálisan
   a `--exclude-languages` kapcsolóval (vesszővel elválasztott nyelvi kulcsok,
   amiket ki kell hagyni – pl. amiket kézzel karbantartasz).

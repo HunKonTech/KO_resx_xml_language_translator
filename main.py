@@ -3,6 +3,7 @@ import re
 import sys
 import argparse
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 from deep_translator import GoogleTranslator
 
 # Matches {placeholder} interpolation tokens used by the TS i18n `t()` helper.
@@ -97,6 +98,27 @@ def translate_preserving_placeholders(text, target_lang):
     for pattern, token in restore:
         translated = pattern.sub(token, translated)
     return translated
+
+
+def run_translations(worklist, translate_fn, workers, progress=None, describe=None):
+    """Translate `worklist` items concurrently, returning (item, translated) pairs.
+
+    Only the network-bound `translate_fn` calls run in the thread pool; results are
+    consumed on the calling thread, so progress printing and file writing stay serial.
+    """
+    results = []
+    if not worklist:
+        return results
+
+    workers = max(1, min(workers, len(worklist)))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        for item, translated in executor.map(translate_fn, worklist):
+            results.append((item, translated))
+            if progress is not None:
+                progress.step(describe(item, translated) if describe else str(translated))
+            elif describe is not None:
+                print(describe(item, translated))
+    return results
 
 
 # ----------------------------------------------------------------------------
@@ -205,7 +227,7 @@ def _escape_ts_string(value):
     return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
-def process_i18n_ts(file_path, force_translate, exclude_languages, source_lang):
+def process_i18n_ts(file_path, force_translate, exclude_languages, source_lang, workers=8):
     with open(file_path, "r", encoding="utf-8") as fh:
         content = fh.read()
 
@@ -252,10 +274,15 @@ def process_i18n_ts(file_path, force_translate, exclude_languages, source_lang):
             worklist.append((name, key, src_value))
 
     progress = ProgressPrinter(len(worklist), recent=4)
-    for name, key, src_value in worklist:
-        translated = translate_preserving_placeholders(src_value, name)
+    results = run_translations(
+        worklist,
+        lambda item: (item, translate_preserving_placeholders(item[2], item[0])),
+        workers,
+        progress=progress,
+        describe=lambda item, translated: f"({item[0]}) {item[1]}: {item[2]} --> {translated}",
+    )
+    for (name, key, _src), translated in results:
         lang_map[name][key] = translated
-        progress.step(f"({name}) {key}: {src_value} --> {translated}")
     progress.done()
 
     # Rebuild the DICTS object using the source key order for every language.
@@ -280,7 +307,7 @@ def process_i18n_ts(file_path, force_translate, exclude_languages, source_lang):
         fh.write(new_content)
     print("\ni18n TypeScript translation completed!")
 
-def process_resx_files(directory, force_translate, exclude_languages):
+def process_resx_files(directory, force_translate, exclude_languages, workers=8):
     original_file = os.path.join(directory, "AppRes.resx")
     if not os.path.exists(original_file):
         print("Original resx file not found!")
@@ -290,48 +317,67 @@ def process_resx_files(directory, force_translate, exclude_languages):
     root = tree.getroot()
     original_entries = {entry.attrib['name']: entry for entry in root.findall('data')}
 
-    for file_name in os.listdir(directory):
-        if file_name.startswith("AppRes.") and file_name.endswith(".resx") and file_name != "AppRes.resx":
-            lang_code = file_name[7:-5]  # Extracting language code from filename
-            if lang_code in exclude_languages:
-                continue
+    # --- Phase A: collect per-file targets and the global translation worklist ---
+    targets = []   # (lang_code, file_path, resx_root)
+    worklist = []  # (lang_code, name, orig_entry, orig_value)
+    for file_name in sorted(os.listdir(directory)):
+        if not (file_name.startswith("AppRes.") and file_name.endswith(".resx") and file_name != "AppRes.resx"):
+            continue
+        lang_code = file_name[7:-5]  # Extracting language code from filename
+        if lang_code in exclude_languages:
+            continue
 
-            file_path = os.path.join(directory, file_name)
-            if os.path.exists(file_path):
-                resx_tree = ET.parse(file_path)
-                resx_root = resx_tree.getroot()
-            else:
-                resx_root = ET.Element("root")
-                for element in root.findall("resheader"):
-                    resx_root.append(element)
-                for schema in root.findall("{http://www.w3.org/2001/XMLSchema}schema"):
-                    resx_root.append(schema)
+        file_path = os.path.join(directory, file_name)
+        if os.path.exists(file_path):
+            resx_root = ET.parse(file_path).getroot()
+        else:
+            resx_root = ET.Element("root")
+            for element in root.findall("resheader"):
+                resx_root.append(element)
+            for schema in root.findall("{http://www.w3.org/2001/XMLSchema}schema"):
+                resx_root.append(schema)
 
-            existing_entries = {entry.attrib['name']: entry for entry in resx_root.findall('data')}
+        existing_entries = {entry.attrib['name']: entry for entry in resx_root.findall('data')}
+        targets.append((lang_code, file_path, resx_root))
 
-            for name, orig_entry in original_entries.items():
+        for name, orig_entry in original_entries.items():
+            if force_translate or name not in existing_entries:
                 orig_value_elem = orig_entry.find('value')
                 orig_value = orig_value_elem.text if orig_value_elem is not None else ""
-                
-                if force_translate or name not in existing_entries:
-                    translated_value = translate_text(orig_value, lang_code[:2])
-                    print(f"Translate ({lang_code}): {orig_value} --> {translated_value}")
-                    new_entry = ET.Element("data", name=name)
-                    if 'xml:space' in orig_entry.attrib:
-                        new_entry.set("xml:space", orig_entry.attrib['xml:space'])
-                    value_elem = ET.SubElement(new_entry, "value")
-                    value_elem.text = translated_value
-                    
-                    comment_elem = orig_entry.find("comment")
-                    if comment_elem is not None:
-                        new_comment = ET.SubElement(new_entry, "comment")
-                        new_comment.text = comment_elem.text
-                    
-                    resx_root.append(new_entry)
+                worklist.append((lang_code, name, orig_entry, orig_value))
 
-            resx_tree = ET.ElementTree(resx_root)
-            resx_tree.write(file_path, encoding="utf-8", xml_declaration=True)
-            print(f"Translate ({lang_code}): Done!")
+    # --- Phase B: translate every missing key across all languages in parallel ---
+    progress = ProgressPrinter(len(worklist), recent=4)
+    results = run_translations(
+        worklist,
+        lambda item: (item, translate_text(item[3], item[0][:2])),
+        workers,
+        progress=progress,
+        describe=lambda item, translated: f"({item[0]}) {item[1]}: {item[3]} --> {translated}",
+    )
+    progress.done()
+
+    # --- Phase C: build and write each file exactly once, on this thread ---
+    by_lang = {}
+    for (lang_code, name, orig_entry, _orig_value), translated in results:
+        new_entry = ET.Element("data", name=name)
+        if 'xml:space' in orig_entry.attrib:
+            new_entry.set("xml:space", orig_entry.attrib['xml:space'])
+        value_elem = ET.SubElement(new_entry, "value")
+        value_elem.text = translated
+
+        comment_elem = orig_entry.find("comment")
+        if comment_elem is not None:
+            new_comment = ET.SubElement(new_entry, "comment")
+            new_comment.text = comment_elem.text
+
+        by_lang.setdefault(lang_code, []).append(new_entry)
+
+    for lang_code, file_path, resx_root in targets:
+        for new_entry in by_lang.get(lang_code, []):
+            resx_root.append(new_entry)
+        ET.ElementTree(resx_root).write(file_path, encoding="utf-8", xml_declaration=True)
+        print(f"Translate ({lang_code}): Done!")
 
     print("\nTranslation process completed!")
 
@@ -343,6 +389,7 @@ def main():
     parser.add_argument("--exclude-languages", type=str, help="Comma-separated list of languages to exclude", required=False, default="")
     parser.add_argument("--force", action="store_true", help="Force re-translate all entries")
     parser.add_argument("--new-only", action="store_true", help="Only translate new entries")
+    parser.add_argument("--workers", type=int, default=8, help="Parallel translation workers (default: 8)")
 
     args = parser.parse_args()
 
@@ -350,18 +397,18 @@ def main():
 
     if args.i18n_file:
         if args.force:
-            process_i18n_ts(args.i18n_file, True, exclude_languages, args.i18n_source_lang)
+            process_i18n_ts(args.i18n_file, True, exclude_languages, args.i18n_source_lang, args.workers)
             sys.exit(0)
         elif args.new_only:
-            process_i18n_ts(args.i18n_file, False, exclude_languages, args.i18n_source_lang)
+            process_i18n_ts(args.i18n_file, False, exclude_languages, args.i18n_source_lang, args.workers)
             sys.exit(0)
 
     if args.resx_directory:
         if args.force:
-            process_resx_files(args.resx_directory, True, exclude_languages)
+            process_resx_files(args.resx_directory, True, exclude_languages, args.workers)
             sys.exit(0)
         elif args.new_only:
-            process_resx_files(args.resx_directory, False, exclude_languages)
+            process_resx_files(args.resx_directory, False, exclude_languages, args.workers)
             sys.exit(0)
     
     while True:
@@ -375,14 +422,18 @@ def main():
 
         if choice in ["1", "2", "3", "4"]:
             exclude_languages = input("Enter languages to exclude (comma separated, optional): ").split(',') if input("Exclude any languages? (y/n): ").lower() == "y" else []
+            try:
+                workers = int(input("Parallel workers [8]: ").strip() or "8")
+            except ValueError:
+                workers = 8
 
         if choice in ["1", "2"]:
             directory = input("Enter the directory of resx files: ")
-            process_resx_files(directory, choice == "2", exclude_languages)
+            process_resx_files(directory, choice == "2", exclude_languages, workers)
         elif choice in ["3", "4"]:
             i18n_file = input("Enter the path to the i18n .ts file: ")
             source_lang = input("Source language key [en]: ").strip() or "en"
-            process_i18n_ts(i18n_file, choice == "4", exclude_languages, source_lang)
+            process_i18n_ts(i18n_file, choice == "4", exclude_languages, source_lang, workers)
         elif choice == "5":
             print("Exiting...")
             sys.exit(0)
